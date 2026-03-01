@@ -50,12 +50,26 @@ const UploadPage = () => {
   const fetchHistory = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        // Not logged in yet; clear history
+        setHistory([]);
+        return;
+      }
       const res = await fetch(HISTORY_URL, {
         headers: {
-          Authorization: token ? `Bearer ${token}` : ''
+          Authorization: `Bearer ${token}`
         }
       });
-      if (!res.ok) throw new Error("Failed to fetch upload history");
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          // Token invalid; clear it
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          setHistory([]);
+          return;
+        }
+        throw new Error("Failed to fetch upload history");
+      }
       const docs = await res.json();
       setHistory(
         docs.map(doc => ({
@@ -232,6 +246,14 @@ const UploadPage = () => {
     showToast && showToast("Please select file(s) first", { type: "warning" });
     return;
   }
+
+  // Check for authentication token
+  const token = localStorage.getItem("token");
+  if (!token) {
+    showToast && showToast("Please login first to upload documents", { type: "error" });
+    return;
+  }
+
   setIsUploading(true);
   setUploadProgress(0);
 
@@ -254,15 +276,23 @@ const UploadPage = () => {
   }, 200);
 
   try {
-    const token = localStorage.getItem("token");
     const res = await fetch(useBatch ? BATCH_API_URL : API_URL, {
       method: "POST",
       body: formData,
-      headers: { Authorization: token ? `Bearer ${token}` : '' }
+      headers: { Authorization: `Bearer ${token}` }
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || "Upload failed");
+    if (!res.ok) {
+      // Handle 401/403 auth errors specifically
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        showToast && showToast("Session expired. Please login again.", { type: "error" });
+        return;
+      }
+      throw new Error(data.message || "Upload failed");
+    }
 
     clearInterval(interval);
     setUploadProgress(100);
@@ -570,6 +600,13 @@ const sendMessage = async () => {
   const text = chatInput.trim();
   if (!text || isTyping) return;
 
+  // Check authentication
+  const token = localStorage.getItem("token");
+  if (!token) {
+    showToast("Please login first to use chat", { type: "error" });
+    return;
+  }
+
   const docId = currentDoc?.documentId || currentDoc?._id || currentDoc?.id;
   if (!docId) {
     setChat(prev => [...prev, { role: "assistant", text: "⚠️ No document selected", at: Date.now() }]);
@@ -582,15 +619,25 @@ const sendMessage = async () => {
   setIsTyping(true);
 
   try {
-    const token = localStorage.getItem("token");
     const res = await fetch(apiUrl(`/api/chat/${docId}/message`), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: token ? `Bearer ${token}` : ""
+        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({ text }),
     });
+    
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        showToast("Session expired. Please login again.", { type: "error" });
+        return;
+      }
+      throw new Error("Failed to send message");
+    }
+    
     const data = await res.json().catch(() => ({}));
     const appended = Array.isArray(data.appended) ? data.appended : [];
     if (appended.length) {
@@ -607,6 +654,12 @@ const sendMessage = async () => {
 };
 
   const clearChat = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showToast("Please login first", { type: "error" });
+      return;
+    }
+
     const docId = currentDoc?.documentId || currentDoc?._id || currentDoc?.id;
     
     // Clear frontend immediately for better UX
@@ -615,11 +668,10 @@ const sendMessage = async () => {
     // Also delete from backend/Atlas if document is selected
     if (docId) {
       try {
-        const token = localStorage.getItem("token");
         await fetch(apiUrl(`/api/chat/${docId}`), {
           method: "DELETE",
           headers: {
-            Authorization: token ? `Bearer ${token}` : ""
+            Authorization: `Bearer ${token}`
           }
         });
         console.log("Chat deleted from Atlas");

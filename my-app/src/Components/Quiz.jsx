@@ -18,15 +18,21 @@ const Quiz = ({ docId, onClose }) => {
   const [showSettings, setShowSettings] = useState(true);
 
   const generateQuiz = async () => {
+    // Check authentication first
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Please login first to generate a quiz");
+      return;
+    }
+
     setIsLoading(true);
     setShowSettings(false);
     try {
-      const token = localStorage.getItem("token");
-  const response = await fetch(pyApiUrl("/api/document/generate-quiz"), {
+      const response = await fetch(pyApiUrl("/api/document/generate-quiz"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           doc_id: docId,
@@ -37,7 +43,19 @@ const Quiz = ({ docId, onClose }) => {
       });
 
       const data = await response.json();
-      if (response.ok && data.success) {
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          alert("Session expired. Please login again.");
+          return;
+        }
+        alert(data.error || "Failed to generate quiz");
+        setShowSettings(true);
+        return;
+      }
+      
+      if (data.success) {
         setQuizData(data.quiz);
         setCurrentQuestion(0);
         setUserAnswers({});

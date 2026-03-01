@@ -4,19 +4,34 @@ from flask_cors import CORS
 import os, io, PyPDF2
 from docx import Document as DocxDocument
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# ====== GEMINI CONFIG (ONLY ONCE) ======
+API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+
+if not API_KEY:
+    raise RuntimeError("❌ Google/Gemini API key not found in .env file")
+
+genai.configure(api_key=API_KEY)
+
+# ======================================
+
 from quiz import quiz_bp, init_quiz
 from flashcard import flashcard_bp, init_flashcards
 from summarize import init_summarizer, summarize_bp
 import chromadb
 import requests
-import tempfile, os, importlib
+import tempfile, importlib
 import hashlib
 from better_profanity import profanity
 import concurrent.futures
 import threading
-profanity.load_censor_words()
 import re
 
+profanity.load_censor_words()
 
 pdf_cache = {}
 
@@ -52,7 +67,9 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
 URL_REGEX = re.compile(r"(https?://[^\s]+|www\.[^\s]+|ftp://[^\s]+|mailto:[^\s]+|t\.me/[^\s]+|discord\.gg/[^\s]+)", re.IGNORECASE)
 
+load_dotenv()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+genai.configure(api_key=GEMINI_API_KEY)
 NODE_BASE_URL = os.environ.get("NODE_BASE_URL", "http://localhost:5000")
 SERVICE_TOKEN = os.environ.get("SERVICE_TOKEN", "smartdoc-service-token")
 NODE_FETCH_TIMEOUT = int(os.environ.get("NODE_FETCH_TIMEOUT", "45"))

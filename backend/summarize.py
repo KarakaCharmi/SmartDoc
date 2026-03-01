@@ -79,13 +79,27 @@ def _map_reduce_summary(genai, model_name: str, selection: str, style: str, bull
     model = genai.GenerativeModel(model_name)
     chunks = _chunk_text(selection)
     if len(chunks) <= 1:
-        resp = model.generate_content(_build_prompt(selection, style, bullets), request_options={"timeout": 30})
-        return (getattr(resp, "text", "") or "").strip()
+        try:
+            resp = model.generate_content(_build_prompt(selection, style, bullets), request_options={"timeout": 30})
+            return (getattr(resp, "text", "") or "").strip()
+        except Exception:
+            # Fallback: simple extractive summary (first few sentences)
+            s = re.split(r"(?<=[.!?])\s+", selection)
+            top = [x.strip() for x in s if x.strip()][:5]
+            if not top:
+                return ""
+            if bullets:
+                return "\n".join(f"• {t}" for t in top)
+            return "\n\n".join(top)
 
     partials = []
     for ch in chunks:
-        r = model.generate_content(_build_prompt(ch, style, bullets), request_options={"timeout": 30})
-        partials.append((getattr(r, "text", "") or "").strip())
+        try:
+            r = model.generate_content(_build_prompt(ch, style, bullets), request_options={"timeout": 30})
+            partials.append((getattr(r, "text", "") or "").strip())
+        except Exception:
+            # best-effort fallback: use the chunk itself as a partial
+            partials.append(ch.strip())
 
     # Reduce step
     combined = "\n\n".join(p for p in partials if p)
@@ -98,8 +112,12 @@ Partials:\n\n{combined}
 
 Final summary:
 """
-    final = model.generate_content(reduce_prompt, request_options={"timeout": 30})
-    return (getattr(final, "text", "") or "").strip()
+    try:
+        final = model.generate_content(reduce_prompt, request_options={"timeout": 30})
+        return (getattr(final, "text", "") or "").strip()
+    except Exception:
+        # Fallback: naive merge of partials
+        return combined.strip()
 
 
 def init_summarizer(TEXT_MODEL: str, genai_module):

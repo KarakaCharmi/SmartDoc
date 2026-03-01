@@ -42,15 +42,27 @@ const Chat = ({ chat, setChat, chatInput, setChatInput, sendMessage, clearChat, 
     if (!documentId) return; // cannot persist without id
     try {
       const token = localStorage.getItem("token");
-  const res = await fetch(apiUrl(`/api/chat/${documentId}/message/${idx}/rating`), {
+      if (!token) {
+        showToast("Please login to save feedback", { type: "error" });
+        revertFn && revertFn();
+        return;
+      }
+      const res = await fetch(apiUrl(`/api/chat/${documentId}/message/${idx}/rating`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
+          Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ rating })
       });
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          showToast("Session expired. Please login again.", { type: "error" });
+          revertFn && revertFn();
+          return;
+        }
         throw new Error((await res.json().catch(()=>({}))).message || 'Failed to save feedback');
       }
       // Update local chat array with persisted rating

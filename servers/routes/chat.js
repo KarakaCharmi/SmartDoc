@@ -8,6 +8,8 @@ const PDFDocument = require("pdfkit");
 
 // Config: Flask endpoint for ask
 const FLASK_ASK_URL = process.env.FLASK_ASK_URL || "http://localhost:5001/api/document/ask";
+// Debug: log resolved Flask URL (helps diagnose network/ENV issues)
+console.info("[chat] FLASK_ASK_URL =>", FLASK_ASK_URL);
 
 // Debug endpoint: List all chats for current user (for testing)
 router.get("/", verifyToken, ensureActive, async (req, res) => {
@@ -55,14 +57,21 @@ router.post("/:documentId/message", verifyToken, ensureActive, async (req, res) 
     // Call Flask to get assistant answer using doc.doc_id
     let assistantText = "";
     try {
+      console.info("[chat] calling Flask ask", FLASK_ASK_URL, { doc_id: doc.doc_id });
       const resp = await fetch(FLASK_ASK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, doc_id: doc.doc_id })
+        body: JSON.stringify({ question: text, doc_id: doc.doc_id }),
+        timeout: 45000,
       });
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        console.error("[chat] Flask ask returned non-OK", resp.status, txt);
+      }
       const json = await resp.json().catch(() => ({}));
       assistantText = json.answer || json.error || "⚠️ Query failed";
     } catch (e) {
+      console.error("[chat] Error contacting Flask ask:", e && (e.stack || e.message || e));
       assistantText = "⚠️ Error contacting assistant";
     }
   const asstMsg = { role: "assistant", text: assistantText, at: new Date(), rating: "none" };

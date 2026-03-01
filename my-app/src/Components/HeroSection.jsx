@@ -163,10 +163,10 @@ const HeroSection = () => {
       <section className="hero-section">
         <div className="hero-container">
           <div className="hero-left">
-            <div className="badge">
+            {/* <div className="badge">
               <span>Powered by</span>
               <Lottie animationData={gemini} loop autoplay className="gemini-icon" />
-            </div>
+            </div> */}
             <h1 className="hero-heading">
               Transform Your <br />
               <span className="gradient-text">Documents</span> with AI

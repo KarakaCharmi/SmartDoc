@@ -30,15 +30,21 @@ const Flashcard = ({ docId, onClose }) => {
   };
 
   const generateFlashcards = async () => {
+    // Check authentication first
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showToast("Please login first to generate flashcards", { type: "error" });
+      return;
+    }
+
     setIsLoading(true);
     setShowSettings(false);
     try {
-      const token = localStorage.getItem("token");
-  const response = await fetch(pyApiUrl("/api/document/generate-flashcards"), {
+      const response = await fetch(pyApiUrl("/api/document/generate-flashcards"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           doc_id: docId,
@@ -47,7 +53,19 @@ const Flashcard = ({ docId, onClose }) => {
       });
 
       const data = await response.json();
-      if (response.ok && data.success) {
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          showToast("Session expired. Please login again.", { type: "error" });
+          return;
+        }
+        showToast(data.error || "Failed to generate flashcards", { type: "error" });
+        setShowSettings(true);
+        return;
+      }
+
+      if (data.success) {
         const cards = data.flashcards || [];
         const generated = cards.length;
         if (generated === 0) {
